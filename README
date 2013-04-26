@@ -7,9 +7,9 @@ with 8-channel audio. Other presets available include sd_mjpeg and sd_mpeg,
 which may be useful when recording an isolated camera for burning to disc.
 
 In stream mode, no additional arguments are required. By default the script
-will stream to rtmp://video1.rpitv.org/rpitv-live/rpitv-live at 2000kbps.
-A URL can be provided on the command line to stream to a different location.
-Bitrate can be changed with '-r 4000k', for example. A bug can be overlaid with
-'-b' or '-B /path/to/bug.svg'. Currently there is only one preset for streaming
-- h264_1080, which streams a deinterlaced 1080p feed.
+will stream from card 1 to rtmp://video1.rpitv.org/rpitv-live/rpitv-live at 
+2000kbps. A URL can be provided on the command line to stream to a different 
+location. Bitrate can be changed with '-r 4000k', for example. A bug can be 
+overlaid by using '-b' or '-B /path/to/bug.svg'. Currently there is only one 
+preset for streaming - h264_1080, which streams a deinterlaced 1080p feed.
 

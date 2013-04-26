@@ -14,6 +14,7 @@ BUGARG=
 case $0 in
 *stream)
 PRESET=h264_1080
+CARD=1
 usage() {
 	stream_usage
 }
