@@ -3,22 +3,60 @@
 CARD=0
 PRESET=hd_mjpeg
 QUALITY=80
+VBITRATE=2000k
 FILE_PATH=/mnt/video-storage
+STREAM_URL=rtmp://video1.rpitv.org:1935/rpitv-live/rpitv-live
+BUG=0
+BUGFILE=/home/rpitv/livebug.svg
+BUGARG=
 
+# set some defaults based on whether run as 'record' or 'stream'
+case $0 in
+*stream)
+PRESET=h264_1080
 usage() {
+	stream_usage
+}
+;;
+*)
+usage() {
+	record_usage
+}
+;;
+esac
+
+record_usage() {
 cat >&2 << EOF
-usage: $0 [-q n] [-p preset] [-c n] production_title
+usage: $0 [-q n] [-p preset] [-c n] [-b] [-B FILE] production_title
 
-Record video from Blackmagic card to .mov file.
+Record video from Blackmagic card to file.
 
--p preset: use capture preset (default hd_mjpeg, also: sd_mjpeg sd_mpeg)
--c n: use capture card n
--q n: for JPEG presets, use quality n
+-p preset: use capture preset (default $PRESET, also: sd_mjpeg sd_mpeg)
+-c n: use capture card n (default $CARD)
+-q n: for JPEG presets, use quality n (default $QUALITY)
+-b: insert bug (does nothing on M-JPEG presets)
+-B FILE: use svg FILE for the bug (default $BUGFILE)
 
 Files are put into $FILE_PATH. 
 The date is automatically prepended to the production_title.
 EOF
 
+}
+
+stream_usage() {
+cat >&2 << EOF
+usage: $0 [-p preset] [-c n] [-b] [-B FILE] [url]
+
+Stream video from Blackmagic card to the given url.
+
+-p preset: use capture preset (default $PRESET, also: ...)
+-c n: use capture card n (default $CARD)
+-b: insert bug
+-B FILE: use svg FILE for the bug (default $BUGFILE)
+-r RATE: set video bit rate (default $RATE)
+url: stream destination (default $STREAM_URL)
+
+EOF
 }
 
 is_numeric() {
@@ -38,33 +76,70 @@ error_exit() {
 }
 
 mjpeg_input() {
-	avpinput_decklink -c $CARD -j -q $QUALITY --channels 8 \
-		"ffmpeg -f s16le -ar 48000 -ac 8 -i pipe:%a -f mjpeg -r 29.97 -i pipe:%v $@"
+	local CHANNELS=8
+	local arg
+	# process options
+	OPTIND=1
+	while getopts "c:" arg; do
+	case $arg in
+		c)
+			is_numeric $OPTARG || error_exit "invalid number of channels"
+			CHANNELS=$OPTARG
+		;;
+	esac
+	done
+
+	shift $((OPTIND-1))
+
+	avpinput_decklink -c $CARD -j -q $QUALITY --channels $CHANNELS \
+		"ffmpeg -f s16le -ar 48000 -ac $CHANNELS -i pipe:%a -f mjpeg -r 29.97 -i pipe:%v $@"
 }
 
 raw_input() {
-	avpinput_decklink -c $CARD --channels 8 \
-		"ffmpeg -f s16le -ar 48000 -ac 8 -i pipe:%a -f rawvideo -r 29.97 \
-			-pix_fmt uyvy422 -s 1920x1080 -i pipe:%v $@"
+	local CHANNELS=8 
+	local arg
+	OPTIND=1
+	while getopts "c:" arg; do
+	case $arg in
+		c)
+			is_numeric $OPTARG || error_exit "invalid number of channels"
+			CHANNELS=$OPTARG
+		;;
+	esac
+	done
+
+	shift $((OPTIND-1))
+
+	avpinput_decklink $BUGARG -c $CARD --channels $CHANNELS \
+		"ffmpeg -f s16le -ar 48000 -ac $CHANNELS -i pipe:%a -f rawvideo \
+			-r 29.97 -pix_fmt uyvy422 -s 1920x1080 -i pipe:%v $@"
 }
 
 hd_mjpeg() {
-	mjpeg_input "-f mov -r 29.97 -vcodec copy -acodec copy /mnt/video-storage/$1.mov"
+	mjpeg_input -- "-f mov -r 29.97 -vcodec copy -acodec copy /mnt/video-storage/$1.mov"
 }
 
 sd_mjpeg() {
 	# record to SD M-JPEG
-	raw_input "-s 720x480 -f mov -r 29.97 -vcodec mjpeg -q:v 4 \
+	raw_input -- "-s 720x480 -f mov -r 29.97 -vcodec mjpeg -q:v 4 \
 		-acodec copy /mnt/video-storage/$1.mov"
 }
 
 sd_mpeg() {
-	raw_input "-s 720x480 -r 29.97 -vcodec mpeg2video -b:v 1600k \
+	raw_input -- "-s 720x480 -r 29.97 -vcodec mpeg2video -b:v 1600k \
 		-acodec mp2 -ac 2 -b:a 192k -ar 44100 -bufsize 32M \
 		-maxrate 1600k -minrate 1600k /mnt/video-storage/$1.mpg"
 }
 
-while getopts "c:p:q:" arg; do
+h264_1080() {
+	raw_input -c 2 -- "-vf yadif -f flv -s 1920x1080 -pix_fmt yuv420p \
+		-vcodec libx264 -acodec libmp3lame -ac 2 -ar 44100 \
+		-vpre ultrafast -b:v $VBITRATE -bt 40k -threads 4 -r 29.97 \
+		-nr 70 -ab 64k $1"
+}
+
+OPTIND=1
+while getopts "c:p:q:bB:r:" arg; do
 case $arg in
 c)
 	# validate if OPTARG is numeric
@@ -88,6 +163,16 @@ p)
 	esac
 	PRESET=$OPTARG
 	;;
+b)
+	BUG=1
+	;;
+B)
+	[ -r "$OPTARG" && -f "$OPTARG" ] || error_exit "bug not found or not readable"
+	BUGFILE="$OPTARG"
+	;;
+r)
+	VBITRATE="$OPTARG"
+	;;
 \?)
 	usage
 	exit 1
@@ -99,14 +184,36 @@ p)
 esac
 done
 
+[ $BUG -eq 1 ] && BUGARG="-b $BUGFILE"
+
 shift $((OPTIND-1))
 
-if [ "$#" -ne 1 ]; then
-	usage
-	exit 1
-fi
 
-DATE=`date +%Y%m%d`
-FILENAME="${DATE}_$1"
+case "$0" in
+*stream)
+	# streaming mode
+	if [ "$#" -gt 1 ]; then
+		echo "USAGE"
+		usage
+		exit 1
+	fi
 
-$PRESET "$FILENAME"
+	# override stream url if supplied
+	[ "$#" -eq 1 ] && STREAM_URL="$1"
+
+	# run chosen preset
+	$PRESET "$STREAM_URL"
+;;
+
+*)
+	# recording mode
+	if [ "$#" -ne 1 ]; then
+		usage
+		exit 1
+	fi
+
+	# recording mode: generate filename
+	DATE=`date +%Y%m%d`
+	FILENAME="${DATE}_$1"
+	$PRESET "$FILENAME"
+esac
