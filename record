@@ -169,6 +169,7 @@ b)
 B)
 	[ -r "$OPTARG" && -f "$OPTARG" ] || error_exit "bug not found or not readable"
 	BUGFILE="$OPTARG"
+	BUG=1
 	;;
 r)
 	VBITRATE="$OPTARG"
