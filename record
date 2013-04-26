@@ -1,0 +1,112 @@
+#!/bin/bash
+
+CARD=0
+PRESET=hd_mjpeg
+QUALITY=80
+FILE_PATH=/mnt/video-storage
+
+usage() {
+cat >&2 << EOF
+usage: $0 [-q n] [-p preset] [-c n] production_title
+
+Record video from Blackmagic card to .mov file.
+
+-p preset: use capture preset (default hd_mjpeg, also: sd_mjpeg sd_mpeg)
+-c n: use capture card n
+-q n: for JPEG presets, use quality n
+
+Files are put into $FILE_PATH. 
+The date is automatically prepended to the production_title.
+EOF
+
+}
+
+is_numeric() {
+	case $1 in
+	''|*[!0-9]*)
+		return 1
+		;;
+	*)
+		return 0
+		;;
+	esac
+}
+
+error_exit() {
+	echo "error: $@" >&2
+	exit 1
+}
+
+mjpeg_input() {
+	avpinput_decklink -c $CARD -j -q $QUALITY --channels 8 \
+		"ffmpeg -f s16le -ar 48000 -ac 8 -i pipe:%a -f mjpeg -r 29.97 -i pipe:%v $@"
+}
+
+raw_input() {
+	avpinput_decklink -c $CARD --channels 8 \
+		"ffmpeg -f s16le -ar 48000 -ac 8 -i pipe:%a -f rawvideo -r 29.97 \
+			-pix_fmt uyvy422 -s 1920x1080 -i pipe:%v $@"
+}
+
+hd_mjpeg() {
+	mjpeg_input "-f mov -r 29.97 -vcodec copy -acodec copy /mnt/video-storage/$1.mov"
+}
+
+sd_mjpeg() {
+	# record to SD M-JPEG
+	raw_input "-s 720x480 -f mov -r 29.97 -vcodec mjpeg -q:v 4 \
+		-acodec copy /mnt/video-storage/$1.mov"
+}
+
+sd_mpeg() {
+	raw_input "-s 720x480 -r 29.97 -vcodec mpeg2video -b:v 1600k \
+		-acodec mp2 -ac 2 -b:a 192k -ar 44100 -bufsize 32M \
+		-maxrate 1600k -minrate 1600k /mnt/video-storage/$1.mpg"
+}
+
+while getopts "c:p:q:" arg; do
+case $arg in
+c)
+	# validate if OPTARG is numeric
+	is_numeric $OPTARG || error_exit "invalid card index"
+	CARD=$OPTARG
+	;;
+q)
+	is_numeric $OPTARG || error_exit "invalid quality"
+	[ $OPTARG -ge 0 -a $OPTARG -le 100 ] || error_exit "invalid quality"
+
+	QUALITY=$OPTARG
+	;;
+p)
+	# validate that this is a preset we know
+	case $OPTARG in
+	hd_mjpeg|sd_mjpeg|sd_mpeg)
+		;;
+	*)
+		error_exit "unknown preset"
+		;;
+	esac
+	PRESET=$OPTARG
+	;;
+\?)
+	usage
+	exit 1
+	;;
+:)
+	usage
+	exit 1
+	;;
+esac
+done
+
+shift $((OPTIND-1))
+
+if [ "$#" -ne 1 ]; then
+	usage
+	exit 1
+fi
+
+DATE=`date +%Y%m%d`
+FILENAME="${DATE}_$1"
+
+$PRESET "$FILENAME"
