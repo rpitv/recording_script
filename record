@@ -136,7 +136,7 @@ h264_1080() {
 	raw_input -c 2 -- "-vf yadif -f flv -s 1920x1080 -pix_fmt yuv420p \
 		-vcodec libx264 -acodec libmp3lame -ac 2 -ar 44100 \
 		-vpre ultrafast -maxrate $VBITRATE -bt 40k -bufsize 32M -threads 4 -r 29.97 \
-		-nr 70 -g 60 -ab 64k $1"
+		-nr 70 -g 60 -ab 256k $1"
 }
 
 
