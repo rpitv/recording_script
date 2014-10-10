@@ -3,7 +3,7 @@
 CARD=0
 PRESET=hd_mjpeg
 QUALITY=80
-VBITRATE=2000k
+VBITRATE=4500k
 FILE_PATH=/mnt/video-storage
 STREAM_URL=rtmp://video1.rpitv.org:1935/rpitv-live/rpitv-live
 BUG=0
