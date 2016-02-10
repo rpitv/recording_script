@@ -9,6 +9,7 @@ STREAM_URL=rtmp://video1.rpitv.org:1935/rpitv-live/rpitv-live
 BUG=0
 BUGFILE=/home/rpitv/livebug.svg
 BUGARG=
+MONO_STREAM=
 
 # set some defaults based on whether run as 'record' or 'stream'
 case $0 in
@@ -99,19 +100,23 @@ mjpeg_input() {
 raw_input() {
 	local CHANNELS=8 
 	local arg
+	local MONO_MIX=
 	OPTIND=1
-	while getopts "c:" arg; do
+	while getopts "mc:" arg; do
 	case $arg in
 		c)
 			is_numeric $OPTARG || error_exit "invalid number of channels"
 			CHANNELS=$OPTARG
+		;;
+		m)
+			MONO_MIX=-m
 		;;
 	esac
 	done
 
 	shift $((OPTIND-1))
 
-	avpinput_decklink $BUGARG -c $CARD --channels $CHANNELS \
+	avpinput_decklink $BUGARG $MONO -f -c $CARD --channels $CHANNELS \
 		"ffmpeg -f s16le -ar 48000 -ac $CHANNELS -i pipe:%a -f rawvideo \
 			-r 29.97 -pix_fmt uyvy422 -s 1920x1080 -i pipe:%v $@"
 }
@@ -133,9 +138,9 @@ sd_mpeg() {
 }
 
 h264_1080() {
-	raw_input -c 2 -- "-vf yadif -f flv -s 1920x1080 -pix_fmt yuv420p \
+	raw_input $MONO_STREAM -c 2 -- "-vf yadif -s 1920x1080 -pix_fmt yuv420p \
 		-vcodec libx264 -acodec libmp3lame -ac 2 -ar 44100 \
-		-vpre ultrafast -maxrate $VBITRATE -bt 40k -bufsize 32M -threads 4 -r 29.97 \
+		-preset ultrafast -maxrate $VBITRATE -bt 40k -bufsize 32M -threads 4 -r 29.97 \
 		-nr 70 -g 60 -ab 256k $1"
 }
 
@@ -155,7 +160,7 @@ h264_480() {
 }
 
 OPTIND=1
-while getopts "c:p:q:bB:r:" arg; do
+while getopts "c:p:q:bB:r:m" arg; do
 case $arg in
 c)
 	# validate if OPTARG is numeric
@@ -189,6 +194,9 @@ B)
 	;;
 r)
 	VBITRATE="$OPTARG"
+	;;
+m)
+	MONO_STREAM=-m
 	;;
 \?)
 	usage
