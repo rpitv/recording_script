@@ -2,7 +2,7 @@
 
 CARD=0
 PRESET=hd_mjpeg
-QUALITY=80
+QUALITY=90
 VBITRATE=4500k
 FILE_PATH=/mnt/video-storage
 STREAM_URL=rtmp://video1.rpitv.org:1935/rpitv-live/rpitv-live
@@ -10,6 +10,8 @@ BUG=0
 BUGFILE=/home/rpitv/livebug.svg
 BUGARG=
 MONO_STREAM=
+FFMPEG_PRESET=veryfast
+AVPINPUT_DECKLINK=/opt/exacore/avspipe/avpinput_decklink
 
 # set some defaults based on whether run as 'record' or 'stream'
 case $0 in
@@ -39,7 +41,7 @@ Record video from Blackmagic card to file.
 -b: insert bug (does nothing on M-JPEG presets)
 -B FILE: use svg FILE for the bug (default $BUGFILE)
 
-Files are put into $FILE_PATH. 
+Files are put into $FILE_PATH.
 The date is automatically prepended to the production_title.
 EOF
 
@@ -93,12 +95,14 @@ mjpeg_input() {
 
 	shift $((OPTIND-1))
 
-	avpinput_decklink -c $CARD -j -q $QUALITY --channels $CHANNELS \
-		"ffmpeg -f s16le -ar 48000 -ac $CHANNELS -i pipe:%a -f mjpeg -r 29.97 -i pipe:%v $@"
+	exec $AVPINPUT_DECKLINK -R -c $CARD -j -q $QUALITY --channels $CHANNELS \
+		"ffmpeg \
+			-thread_queue_size 512 -f s16le -ar 48000 -ac $CHANNELS -i pipe:%a \
+			-thread_queue_size 512 -f mjpeg -r 29.97 -i pipe:%v $@"
 }
 
 raw_input() {
-	local CHANNELS=8 
+	local CHANNELS=8
 	local arg
 	local MONO_MIX=
 	OPTIND=1
@@ -116,9 +120,10 @@ raw_input() {
 
 	shift $((OPTIND-1))
 
-	avpinput_decklink $BUGARG $MONO -f -c $CARD --channels $CHANNELS \
-		"ffmpeg -f s16le -ar 48000 -ac $CHANNELS -i pipe:%a -f rawvideo \
-			-r 29.97 -pix_fmt uyvy422 -s 1920x1080 -i pipe:%v $@"
+	exec $AVPINPUT_DECKLINK -R $BUGARG $MONO_MIX -c $CARD --channels $CHANNELS \
+		"ffmpeg -thread_queue_size 512 -f s16le -ar 48000 -ac $CHANNELS -i pipe:%a \
+			-thread_queue_size 512 -f rawvideo -r 29.97 -pix_fmt uyvy422 \
+			-s 1920x1080 -i pipe:%v $@"
 }
 
 hd_mjpeg() {
@@ -140,7 +145,7 @@ sd_mpeg() {
 h264_1080() {
 	raw_input $MONO_STREAM -c 2 -- "-vf yadif -s 1920x1080 -pix_fmt yuv420p \
 		-vcodec libx264 -acodec libmp3lame -ac 2 -ar 44100 \
-		-preset ultrafast -maxrate $VBITRATE -bt 40k -bufsize 32M -threads 4 -r 29.97 \
+		-preset $FFMPEG_PRESET -maxrate $VBITRATE -bt 40k -bufsize 32M -threads 8 -r 29.97 \
 		-nr 70 -g 60 -ab 256k $1"
 }
 
@@ -155,7 +160,7 @@ h264_1080() {
 h264_480() {
 	raw_input -c 2 -- "-vf yadif -f flv -vf crop=1440:1080 -s 640x480 -pix_fmt yuv420p \
 		-vcodec libx264 -acodec libmp3lame -ac 2 -ar 44100 \
-		-vpre ultrafast -b:v $VBITRATE -bt:v 40k -threads 4 -r 29.97 \
+		-vpre $FFMPEG_PRESET -b:v $VBITRATE -bt:v 40k -threads 4 -r 29.97 \
 		-nr 70 -g 60 -ab 64k $1"
 }
 
