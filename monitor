@@ -1,0 +1,11 @@
+#!/bin/bash
+
+for pid in $(pgrep avpinput); do
+	echo "PROCESS $pid"
+	viu -h 20 "/tmp/avpinput_$pid.jpg"
+	i=1
+	echo -n "AUDIO CH "
+	for ch in $(cat "/tmp/avpinput_$pid.peak"); do echo -n "$i:${ch}dB "; i=$(($i+1)); done
+	echo
+	echo
+done
