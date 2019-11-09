@@ -95,9 +95,12 @@ mjpeg_input() {
 
 	shift $((OPTIND-1))
 
+	# -probesize 32 on audio, which shouldn't need probing anyway
+	# this should avoid deadlocks
 	exec $AVPINPUT_DECKLINK -R -c $CARD -j -q $QUALITY --channels $CHANNELS \
 		"ffmpeg \
-			-thread_queue_size 512 -f s16le -ar 48000 -ac $CHANNELS -i pipe:%a \
+			-thread_queue_size 512 -probesize 32 \
+			-f s16le -ar 48000 -ac $CHANNELS -i pipe:%a \
 			-thread_queue_size 512 -f mjpeg -r 29.97 -i pipe:%v $@"
 }
 
@@ -120,9 +123,13 @@ raw_input() {
 
 	shift $((OPTIND-1))
 
+	# -probesize 32 is very important here especially on the audio input.
+	# this tells ffmpeg to read less data when starting up.
 	exec $AVPINPUT_DECKLINK -R $BUGARG $MONO_MIX -c $CARD --channels $CHANNELS \
-		"ffmpeg -thread_queue_size 512 -f s16le -ar 48000 -ac $CHANNELS -i pipe:%a \
-			-thread_queue_size 512 -f rawvideo -r 29.97 -pix_fmt uyvy422 \
+		"ffmpeg -thread_queue_size 512 -probesize 32 \
+			-f s16le -ar 48000 -ac $CHANNELS -i pipe:%a \
+			-thread_queue_size 512 -probesize 32 \
+			-f rawvideo -r 29.97 -pix_fmt uyvy422 \
 			-s 1920x1080 -i pipe:%v $@"
 }
 
