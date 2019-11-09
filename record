@@ -8,10 +8,12 @@ FILE_PATH=/mnt/video-storage
 STREAM_URL=rtmp://video1.rpitv.org:1935/rpitv-live/rpitv-live
 BUG=0
 BUGFILE=/home/rpitv/livebug.svg
-BUGARG=
+KEYERARGS=()
 MONO_STREAM=
 FFMPEG_PRESET=veryfast
-AVPINPUT_DECKLINK=/opt/exacore/avspipe/avpinput_decklink
+AVPINPUT_DECKLINK=/home/armena/exacore/avspipe/avpinput_decklink
+HTTPKEYER=/home/armena/exacore/keyer/http_keyer.rb
+SCOREBOARD=/bin/false
 
 # set some defaults based on whether run as 'record' or 'stream'
 case $0 in
@@ -97,7 +99,8 @@ mjpeg_input() {
 
 	# -probesize 32 on audio, which shouldn't need probing anyway
 	# this should avoid deadlocks
-	exec $AVPINPUT_DECKLINK -R -c $CARD -j -q $QUALITY --channels $CHANNELS \
+	exec $AVPINPUT_DECKLINK -R "${KEYERARGS[@]}" -c $CARD \
+		-j -q $QUALITY --channels $CHANNELS \
 		"ffmpeg \
 			-thread_queue_size 512 -probesize 32 \
 			-f s16le -ar 48000 -ac $CHANNELS -i pipe:%a \
@@ -125,7 +128,8 @@ raw_input() {
 
 	# -probesize 32 is very important here especially on the audio input.
 	# this tells ffmpeg to read less data when starting up.
-	exec $AVPINPUT_DECKLINK -R $BUGARG $MONO_MIX -c $CARD --channels $CHANNELS \
+	exec $AVPINPUT_DECKLINK -R "${KEYERARGS[@]}" $MONO_MIX \
+		-c $CARD --channels $CHANNELS \
 		"ffmpeg -thread_queue_size 512 -probesize 32 \
 			-f s16le -ar 48000 -ac $CHANNELS -i pipe:%a \
 			-thread_queue_size 512 -probesize 32 \
@@ -171,8 +175,22 @@ h264_480() {
 		-nr 70 -g 60 -ab 64k $1"
 }
 
+setup_keyer() {
+	case "$1" in
+	pnghttp)
+		KEYERARGS+=("--png-cg" "$HTTPKEYER -h :: -p 4567")
+		;;
+	scoreboard)
+		KEYERARGS+=("--svg-cg" "$SCOREBOARD")
+		;;
+	*)
+	error_exit "unknown key type"
+		;;
+	esac
+}
+
 OPTIND=1
-while getopts "c:p:q:bB:r:m" arg; do
+while getopts "c:p:q:bB:r:mX:" arg; do
 case $arg in
 c)
 	# validate if OPTARG is numeric
@@ -210,6 +228,9 @@ r)
 m)
 	MONO_STREAM=-m
 	;;
+X)
+	setup_keyer "$OPTARG"
+	;;
 \?)
 	usage
 	exit 1
@@ -221,7 +242,7 @@ m)
 esac
 done
 
-[ $BUG -eq 1 ] && BUGARG="-b $BUGFILE"
+[ $BUG -eq 1 ] && KEYERARGS+=(-b "$BUGFILE")
 
 shift $((OPTIND-1))
 
