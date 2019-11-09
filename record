@@ -8,12 +8,16 @@ FILE_PATH=/mnt/video-storage
 STREAM_URL=rtmp://video1.rpitv.org:1935/rpitv-live/rpitv-live
 BUG=0
 BUGFILE=/home/rpitv/livebug.svg
+PNGBUG=/home/armena/bug.png
 KEYERARGS=()
 MONO_STREAM=
+FFMPEG=/home/armena/ffmpeg/ffmpeg
 FFMPEG_PRESET=veryfast
-AVPINPUT_DECKLINK=/home/armena/exacore/avspipe/avpinput_decklink
-HTTPKEYER=/home/armena/exacore/keyer/http_keyer.rb
-SCOREBOARD=/bin/false
+AVPINPUT_DECKLINK=/home/armena/exacore_work/avspipe/avpinput_decklink
+HTTPKEYER=/home/armena/exacore_work/keyer/http_keyer.rb
+SCOREBOARD=/opt/scoreboard/scoreboard.sh
+
+set -eux
 
 # set some defaults based on whether run as 'record' or 'stream'
 case $0 in
@@ -101,7 +105,7 @@ mjpeg_input() {
 	# this should avoid deadlocks
 	exec $AVPINPUT_DECKLINK -R "${KEYERARGS[@]}" -c $CARD \
 		-j -q $QUALITY --channels $CHANNELS \
-		"ffmpeg \
+		"$FFMPEG \
 			-thread_queue_size 512 -probesize 32 \
 			-f s16le -ar 48000 -ac $CHANNELS -i pipe:%a \
 			-thread_queue_size 512 -f mjpeg -r 29.97 -i pipe:%v $@"
@@ -130,7 +134,7 @@ raw_input() {
 	# this tells ffmpeg to read less data when starting up.
 	exec $AVPINPUT_DECKLINK -R "${KEYERARGS[@]}" $MONO_MIX \
 		-c $CARD --channels $CHANNELS \
-		"ffmpeg -thread_queue_size 512 -probesize 32 \
+		"$FFMPEG -thread_queue_size 512 -probesize 32 \
 			-f s16le -ar 48000 -ac $CHANNELS -i pipe:%a \
 			-thread_queue_size 512 -probesize 32 \
 			-f rawvideo -r 29.97 -pix_fmt uyvy422 \
@@ -178,10 +182,13 @@ h264_480() {
 setup_keyer() {
 	case "$1" in
 	pnghttp)
-		KEYERARGS+=("--png-cg" "$HTTPKEYER -h :: -p 4567")
+		KEYERARGS+=("--cg-x" "0" "--cg-y" "0" "--png-cg" "$HTTPKEYER -h :: -p 4567")
+		;;
+	pngbug)
+		KEYERARGS+=("--cg-x" "0" "--cg-y" "0" "--png-cg" "$HTTPKEYER -h :: -p 3005 -f $PNGBUG")
 		;;
 	scoreboard)
-		KEYERARGS+=("--svg-cg" "$SCOREBOARD")
+		KEYERARGS+=("--cg-x" "150" "--cg-y" "50" "--svg-cg" "$SCOREBOARD")
 		;;
 	*)
 	error_exit "unknown key type"
