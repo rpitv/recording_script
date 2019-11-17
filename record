@@ -9,9 +9,9 @@ STREAM_URL=rtmp://video1.rpitv.org:1935/rpitv-live/rpitv-live
 BUG=0
 BUGFILE=/home/rpitv/livebug.svg
 PNGBUG=/home/armena/bug.png
-KEYERARGS=()
+FILTERARGS=()
 MONO_STREAM=
-FFMPEG=/home/armena/ffmpeg/ffmpeg
+FFMPEG=/usr/local/bin/ffmpeg
 FFMPEG_PRESET=veryfast
 AVPINPUT_DECKLINK=/home/armena/exacore_work/avspipe/avpinput_decklink
 HTTPKEYER=/home/armena/exacore_work/keyer/http_keyer.rb
@@ -103,7 +103,7 @@ mjpeg_input() {
 
 	# -probesize 32 on audio, which shouldn't need probing anyway
 	# this should avoid deadlocks
-	exec $AVPINPUT_DECKLINK -R "${KEYERARGS[@]}" -c $CARD \
+	exec $AVPINPUT_DECKLINK -R "${FILTERARGS[@]}" -c $CARD \
 		-j -q $QUALITY --channels $CHANNELS \
 		"$FFMPEG \
 			-thread_queue_size 512 -probesize 32 \
@@ -132,7 +132,7 @@ raw_input() {
 
 	# -probesize 32 is very important here especially on the audio input.
 	# this tells ffmpeg to read less data when starting up.
-	exec $AVPINPUT_DECKLINK -R "${KEYERARGS[@]}" $MONO_MIX \
+	exec $AVPINPUT_DECKLINK -R "${FILTERARGS[@]}" $MONO_MIX \
 		-c $CARD --channels $CHANNELS \
 		"$FFMPEG -thread_queue_size 512 -probesize 32 \
 			-f s16le -ar 48000 -ac $CHANNELS -i pipe:%a \
@@ -159,7 +159,7 @@ sd_mpeg() {
 
 h264_1080() {
 	raw_input $MONO_STREAM -c 2 -- "-vf yadif -s 1920x1080 -pix_fmt yuv420p \
-		-vcodec libx264 -acodec libmp3lame -ac 2 -ar 44100 \
+		-vcodec libx264 -acodec aac -ac 2 -ar 44100 \
 		-preset $FFMPEG_PRESET -maxrate $VBITRATE -bt 40k -bufsize 32M -threads 8 -r 29.97 \
 		-nr 70 -g 60 -ab 256k $1"
 }
@@ -174,7 +174,7 @@ h264_1080() {
 
 h264_480() {
 	raw_input -c 2 -- "-vf yadif -f flv -vf crop=1440:1080 -s 640x480 -pix_fmt yuv420p \
-		-vcodec libx264 -acodec libmp3lame -ac 2 -ar 44100 \
+		-vcodec libx264 -acodec aac -ac 2 -ar 44100 \
 		-vpre $FFMPEG_PRESET -b:v $VBITRATE -bt:v 40k -threads 4 -r 29.97 \
 		-nr 70 -g 60 -ab 64k $1"
 }
@@ -182,13 +182,13 @@ h264_480() {
 setup_keyer() {
 	case "$1" in
 	pnghttp)
-		KEYERARGS+=("--cg-x" "0" "--cg-y" "0" "--png-cg" "$HTTPKEYER -h :: -p 4567")
+		FILTERARGS+=("--cg-x" "0" "--cg-y" "0" "--png-cg" "$HTTPKEYER -h :: -p 4567")
 		;;
 	pngbug)
-		KEYERARGS+=("--cg-x" "0" "--cg-y" "0" "--png-cg" "$HTTPKEYER -h :: -p 3005 -f $PNGBUG")
+		FILTERARGS+=("--cg-x" "0" "--cg-y" "0" "--png-cg" "$HTTPKEYER -h :: -p 3005 -f $PNGBUG")
 		;;
 	scoreboard)
-		KEYERARGS+=("--cg-x" "150" "--cg-y" "50" "--svg-cg" "$SCOREBOARD")
+		FILTERARGS+=("--cg-x" "150" "--cg-y" "50" "--svg-cg" "$SCOREBOARD")
 		;;
 	*)
 	error_exit "unknown key type"
@@ -197,7 +197,7 @@ setup_keyer() {
 }
 
 OPTIND=1
-while getopts "c:p:q:bB:r:mX:" arg; do
+while getopts "c:p:q:bB:r:mX:o:" arg; do
 case $arg in
 c)
 	# validate if OPTARG is numeric
@@ -238,6 +238,9 @@ m)
 X)
 	setup_keyer "$OPTARG"
 	;;
+o)
+	FILTERARGS+=("-o" "$OPTARG")
+	;;
 \?)
 	usage
 	exit 1
@@ -249,7 +252,7 @@ X)
 esac
 done
 
-[ $BUG -eq 1 ] && KEYERARGS+=(-b "$BUGFILE")
+[ $BUG -eq 1 ] && FILTERARGS+=(-b "$BUGFILE")
 
 shift $((OPTIND-1))
 
