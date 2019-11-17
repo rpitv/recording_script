@@ -11,7 +11,7 @@ BUGFILE=/home/rpitv/livebug.svg
 PNGBUG=/home/armena/bug.png
 FILTERARGS=()
 MONO_STREAM=
-FFMPEG=/usr/local/bin/ffmpeg
+FFMPEG=/home/armena/ffmpeg/ffmpeg
 FFMPEG_PRESET=veryfast
 AVPINPUT_DECKLINK=/home/armena/exacore_work/avspipe/avpinput_decklink
 HTTPKEYER=/home/armena/exacore_work/keyer/http_keyer.rb
@@ -164,13 +164,12 @@ h264_1080() {
 		-nr 70 -g 60 -ab 256k $1"
 }
 
-
-#h264_1080() {
-#	raw_input -- "-vf yadif -f mpegts -s 1920x1080 -pix_fmt yuv420p \
-#		-vcodec libx264 -acodec mp3 -ar 48000 -ac 8 \
-#		-vpre ultrafast -maxrate $VBITRATE -bt 40k -bufsize 32M -threads 4 -r 29.97 \
-#		-nr 70 -g 60 -ab 64k $1"
-#}
+h264_1080_qsv() {
+	raw_input $MONO_STREAM -c 2 -- "-vaapi_device /dev/dri/renderD128 \
+		-vf 'yadif,format=nv12,hwupload' \
+		-vcodec h264_vaapi -acodec aac -ac 2 -ar 44100 \
+		-b:v $VBITRATE -r 29.97 -g 60 -ab 256k $1"
+}
 
 h264_480() {
 	raw_input -c 2 -- "-vf yadif -f flv -vf crop=1440:1080 -s 640x480 -pix_fmt yuv420p \
@@ -213,7 +212,7 @@ q)
 p)
 	# validate that this is a preset we know
 	case $OPTARG in
-	hd_mjpeg|sd_mjpeg|sd_mpeg|h264_480)
+	hd_mjpeg|sd_mjpeg|sd_mpeg|h264_1080|h264_1080_qsv|h264_480)
 		;;
 	*)
 		error_exit "unknown preset"
